@@ -4,6 +4,8 @@ const cors = require('cors')
 const admin = require("firebase-admin");
 require('dotenv').config()
 const { MongoClient } = require('mongodb');
+const ObjectId = require('mongodb').ObjectId;
+const stripe = require('stripe')(process.env.STRIPE_SECRET)
 
 const port = process.env.PORT || 5000
 
@@ -50,11 +52,29 @@ async function run() {
     app.get('/appointments', verifyToken, async (req, res) => {
       const email = req.query.email;
       const date = req.query.date
-      console.log(date,email)
+      console.log(date, email)
       const query = { email: email, date: date }
       const cursor = appointmentCollection.find(query)
       const appointments = await cursor.toArray()
       res.json(appointments)
+    })
+    app.get('/appointment/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: ObjectId(id) }
+      const result = await appointmentCollection.findOne(query)
+      res.json(result)
+    })
+    app.put('/appointment/:id', async (req, res) => {
+      const id = req.params.id;
+      const payment = req.body
+      const filter = { _id: ObjectId(id) }
+      const updateDoc = {
+        $set: {
+          payment: payment
+        }
+      }
+      const result = await appointmentCollection.updateOne(filter, updateDoc)
+      res.json(result)
     })
 
     app.post('/appointments', async (req, res) => {
@@ -106,6 +126,17 @@ async function run() {
       else {
         res.status(403).json({ message: 'you do not have access to Make Admin ' })
       }
+    })
+
+    app.post('/create-payment-intent', async (req, res) => {
+      const paymentInfo = req.body
+      const amount = paymentInfo.price * 100
+      const paymentIntent = await stripe.paymentIntents.create({
+        currency: 'usd',
+        amount: amount,
+        payment_method_types: ['card']
+      })
+      res.json({ clientSecret: paymentIntent.client_secret })
     })
 
   }
